@@ -10,19 +10,6 @@
  *  	Be sure that GND is connected to arduino too.
  *  	You can also change the RESET_PIN as you prefer.
  *
- *	ESP
- *  	Esta libreria usa SoftwareSerial, se pueden cambiar los pines de RX y TX
- *  	en el archivo header, "Sim800L.h", por defecto los pines vienen configurado en
- *  	RX=10 TX=11.
- *  	Tambien se puede cambiar el RESET_PIN por otro que prefiera
- *
- *	ITA
- *		Questa libreria utilizza la SoftwareSerial, si possono cambiare i pin di RX e TX
- *  	dall' intestazione "Sim800L.h", di default essi sono impostati come RX=10 RX=11
- *		Assicurarsi di aver collegato il dispositivo al pin GND di Arduino.
- *		E' anche possibile cambiare il RESET_PIN.
- *
- *
  *   DEFAULT PINOUT:
  *        _____________________________
  *       |  ARDUINO UNO >>>   Sim800L  |
@@ -221,6 +208,23 @@ bool Sim800L::setPIN(String pin)
     // Error NOT found, return 0
 }
 
+bool Sim800L::PINIsReady()
+{
+    String command;
+    command  = "AT+CPIN?";
+    command += "\r";
+
+    // Can take up to 5 seconds
+
+    this->SoftwareSerial::print(command);
+
+        if ( (_readSerial(5000).indexOf("CPIN:READY")) != -1)
+        {
+            return true;
+        }
+
+     return false;
+}
 
 String Sim800L::getProductInfo()
 {
@@ -247,6 +251,72 @@ String Sim800L::getOperator()
 
     return _readSerial();
 
+}
+
+bool Sim800L::registerToNetwork()
+{
+    this->SoftwareSerial::print("AT+CREG=1\r");
+
+    if ( (_readSerial(5000).indexOf("OK")) == -1)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+NetworkRegistrationStatus Sim800L::registrationStatus()
+{
+    this->SoftwareSerial::print("AT+CREG ?\r");
+
+    String status = _readSerial(); 
+    
+   if(status.indexOf("CREG: 0,1") > -1)
+    {
+        return NetworkRegistrationStatus::notRegistrerAndNotSearching;
+    }
+    if(status.indexOf("CREG: 1,1") > -1)
+    {
+        return NetworkRegistrationStatus::registrerHomeNetwork;
+    }
+    if(status.indexOf("CREG: 2,1") > -1)
+    {
+        return NetworkRegistrationStatus::notRegistrerAndSearching;
+    }
+    if(status.indexOf("CREG: 3,1") > -1)
+    {
+        return NetworkRegistrationStatus::registerDenied;
+    }
+    if(status.indexOf("CREG: 4,1") > -1)
+    {
+        return NetworkRegistrationStatus::unknown;
+    }
+    if(status.indexOf("CREG: 5,1") > -1)
+    {
+        return NetworkRegistrationStatus::registerRoaming;
+    }
+    if(status.indexOf("CREG: 6,1") > -1)
+    {
+        return NetworkRegistrationStatus::registerSmsOnlyHomeNetwork;
+    }
+    if(status.indexOf("CREG: 7,1") > -1)
+    {
+        return NetworkRegistrationStatus::registerSmsOnlyRoaming;
+    }
+    if(status.indexOf("CREG: 8,1") > -1)
+    {
+        return NetworkRegistrationStatus::registeredForEmergencyService;
+    }
+    if(status.indexOf("CREG: 9,1") > -1)
+    {
+        return NetworkRegistrationStatus::registeredForCSFBNotPreferedHomeNetwork;
+    }
+    if(status.indexOf("CREG: 9,1") > -1)
+    {
+        return NetworkRegistrationStatus::registeredForCSFBNotPreferedRoaming;
+    }
+
+    return NetworkRegistrationStatus::unknown;
 }
 
 
@@ -462,6 +532,44 @@ bool Sim800L::hangoffCall()
     // Error NOT found, return 0
 }
 
+int Sim800L::sendSms(String pdu)
+{
+    int pduLength = (pdu.length() / 2)-1;
+
+    if(pduLength < 10)
+    {
+        // Bad Pdu
+        return false;
+    }
+
+    this->SoftwareSerial::print (F("AT+CMGS="));  	// command to send sms
+    this->SoftwareSerial::print (pduLength);
+    this->SoftwareSerial::println();
+    _buffer=_readSerial(100);
+    this->SoftwareSerial::print (pdu);
+    _buffer=_readSerial(100);
+    this->SoftwareSerial::write(0x1a); // Ctrl+Z end of the message
+    _buffer=_readSerial(60000);
+    Serial.println(_buffer);
+    //expect CMGS:xxx   , where xxx is a number,for the sending sms.
+    if ((_buffer.indexOf("ER")) != -1) {
+        return -2;
+    }
+    
+    if ((_buffer.indexOf("CMGS")) < 0) {
+        return -3;
+  	}
+    
+    int indexOfTwoDots = _buffer.indexOf(':');
+
+    if(indexOfTwoDots == -1)
+    {
+        return -1;
+    }
+
+    return (_buffer.substring(indexOfTwoDots+1)).toInt();
+
+}
 
 bool Sim800L::sendSms(char* number,char* text)
 {
@@ -492,18 +600,36 @@ bool Sim800L::sendSms(char* number,char* text)
     // Error NOT found, return 0
 }
 
-
-bool Sim800L::prepareForSmsReceive()
+bool Sim800L::setPduMode()
 {
-	// Configure SMS in text mode
-	this->SoftwareSerial::print(F("AT+CMGF=1\r"));
+	this->SoftwareSerial::print(F("AT+CMGF=0\r"));
     _buffer=_readSerial();
-    //Serial.print(_buffer);
+    
     if((_buffer.indexOf("OK")) == -1)
     {
         return false;
     }
-	this->SoftwareSerial::print(F("AT+CNMI=2,1,0,0,0\r"));
+
+    return true;
+}
+
+bool Sim800L::setTextMode()
+{
+	this->SoftwareSerial::print(F("AT+CMGF=1\r"));
+    _buffer=_readSerial();
+    Serial.print(_buffer);
+    if((_buffer.indexOf("OK")) == -1)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool Sim800L::prepareForSmsReceive()
+{
+	
+	this->SoftwareSerial::print(F("AT+CNMI=2,2,0,1,0\r")); // 2,1,0,1,0 Active Ds mode (Data report)
     _buffer=_readSerial();
     //Serial.print(_buffer);
     if((_buffer.indexOf("OK")) == -1)
@@ -511,6 +637,118 @@ bool Sim800L::prepareForSmsReceive()
         return false;
     }
     return true;
+}
+
+void Sim800L::checkForGsmMessage()
+{
+	 _buffer = _readSerial(100);
+	 if(_buffer.length() == 0)
+	 {
+        return ;
+	 	//return 0;
+	 }
+     _buffer += _readSerial(5000);
+   /*  Serial.println("checkForSMS");
+
+	 Serial.println(_buffer);
+     
+	 Serial.println("-----------------");*/
+
+    int indexOfCds = _buffer.indexOf("+CDS:");
+    int firstIndexHandle = 0;
+    int lastIndexHandle = 0;
+    //bool hasMeetFirstCrlf = false;
+
+    if(indexOfCds != -1)
+    {
+        // Here we receive a Status report
+        // Response format
+        //+CDS: 33\r\n
+        //07913366003000F006090B913356108867F8122091901000401220919010004000\r\n
+
+        for(int i = indexOfCds; i < _buffer.length(); i++)
+        {
+           /* if(hasMeetFirstCrlf)
+            {
+            // need to wait for the first CR
+            Serial.print(_buffer[i]);
+            Serial.print(" --- ");
+            Serial.println(_buffer[i], HEX);
+            }*/
+         
+            if(i>0 && _buffer[i-1] == '\r' && _buffer[i] == '\n')
+            {
+                if(firstIndexHandle == 0)
+                {
+                    firstIndexHandle = i+1;
+
+                    //hasMeetFirstCrlf = true;
+                }
+                else{
+                    lastIndexHandle = i-1;
+                    // we are at the end of the line. Need to send info
+                    if(firstIndexHandle > 0 && lastIndexHandle > firstIndexHandle)
+                    {
+                        if(onStatusReport != NULL){
+                            onStatusReport(_buffer.substring(firstIndexHandle, lastIndexHandle));
+                        }
+                    }
+                }
+              
+            }
+        }
+
+    }
+
+    int indexOfCMT = _buffer.indexOf("+CMT:");
+    firstIndexHandle = 0;
+    lastIndexHandle = 0;
+
+    if(indexOfCMT != -1){
+    // Here we receive a new message
+    // Response format
+    //+CMT: "",135\r\n
+    //07913366003000F0240B913356108867F800001220919013734084C170381C0E87C3E170381C0E87C3E170381C0E87C3E1B05EAFD7EBF57ABD7E3E9FCFCF67341AAD56ABD56A75BD9E4AD3631ADA9FBEBC97AE3DE84974EFDE8436DFAD3872C68C62152C68C92399C29396BD964A31634AA56BD6A59CD6\r\n
+
+        for(int i = indexOfCMT; i < _buffer.length(); i++)
+        {
+           
+            // need to wait for the first CR
+            /*Serial.print(_buffer[i]);
+            Serial.print(" --- ");
+            Serial.println(_buffer[i], HEX);
+            */
+         
+            if(i>0 && _buffer[i-1] == '\r' && _buffer[i] == '\n')
+            {
+                if(firstIndexHandle == 0)
+                {
+                    firstIndexHandle = i+1;
+
+                    //hasMeetFirstCrlf = true;
+                }
+                else{
+                    lastIndexHandle = i-1;
+                    // we are at the end of the line. Need to send info
+                    if(firstIndexHandle > 0 && lastIndexHandle > firstIndexHandle)
+                    {
+                        if(onNewMessage != NULL){
+                             onNewMessage(_buffer.substring(firstIndexHandle, lastIndexHandle));
+                        }
+                    }
+                }
+              
+            }
+        }
+    }
+
+    //return _buffer;
+	 // +CMTI: "SM",1
+	// if(_buffer.indexOf("+CMTI:") == -1)
+	// {
+	// 	return 0;
+	// }
+	// return _buffer.substring(_buffer.indexOf(',')+1).toInt();
 }
 
 const uint8_t Sim800L::checkForSMS()
@@ -521,9 +759,12 @@ const uint8_t Sim800L::checkForSMS()
 	 	return 0;
 	 }
      _buffer += _readSerial(1000);
-	 // Serial.println(_buffer);
+	 Serial.println("checkForSMS");
+	 Serial.println(_buffer);
+     
+	 Serial.println("-----------------");
 	 // +CMTI: "SM",1
-	 if(_buffer.indexOf("CMTI") == -1)
+	 if(_buffer.indexOf("+CMTI:") == -1)
 	 {
 	 	return 0;
 	 }
@@ -547,8 +788,6 @@ String Sim800L::getNumberSms(uint8_t index)
     }
 }
 
-
-
 String Sim800L::readSms(uint8_t index)
 {
     // Can take up to 5 seconds
@@ -562,12 +801,14 @@ String Sim800L::readSms(uint8_t index)
     this->SoftwareSerial::print (index);
     this->SoftwareSerial::print ("\r");
     _buffer=_readSerial();
-    //Serial.println(_buffer);
-    if (_buffer.indexOf("CMGR") == -1)
+   //Serial.println("Received !!");
+   //Serial.println(_buffer);
+    if (_buffer.indexOf("CMGR=") == -1)
     {
     	return "";
     }
 
+    //Serial.println(_buffer);
 	_buffer = _readSerial(10000);
 	byte first = _buffer.indexOf('\n', 2) + 1;
 	byte second = _buffer.indexOf('\n', first);
@@ -579,8 +820,10 @@ bool Sim800L::delAllSms()
 {
     // Can take up to 25 seconds
 
-    this->SoftwareSerial::print(F("at+cmgda=\"del all\"\n\r"));
+    this->SoftwareSerial::print(F("AT+CMGD=4\r"));
     _buffer=_readSerial(25000);
+    Serial.print("Delete : ");
+    Serial.println(_buffer);
     if ( (_buffer.indexOf("ER")) == -1)
     {
         return false;

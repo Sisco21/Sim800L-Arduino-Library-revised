@@ -10,19 +10,6 @@
  *  	Be sure that GND is connected to arduino too.
  *  	You can also change the RESET_PIN as you prefer.
  *
- *	ESP
- *  	Esta libreria usa SoftwareSerial, se pueden cambiar los pines de RX y TX
- *  	en el archivo header, "Sim800L.h", por defecto los pines vienen configurado en
- *  	RX=10 TX=11.
- *  	Tambien se puede cambiar el RESET_PIN por otro que prefiera
- *
- *	ITA
- *		Questa libreria utilizza la SoftwareSerial, si possono cambiare i pin di RX e TX
- *  	dall' intestazione "Sim800L.h", di default essi sono impostati come RX=10 RX=11
- *		Assicurarsi di aver collegato il dispositivo al pin GND di Arduino.
- *		E' anche possibile cambiare il RESET_PIN.
- *
- *
  *   DEFAULT PINOUT:
  *        _____________________________
  *       |  ARDUINO UNO >>>   Sim800L  |
@@ -70,9 +57,23 @@
 #define DEFAULT_LED_FLAG	true 	// true: use led.	 false: don't user led.
 #define DEFAULT_LED_PIN 	13 		// pin to indicate states.
 
-#define BUFFER_RESERVE_MEMORY	255
+#define BUFFER_RESERVE_MEMORY	300
 #define DEFAULT_BAUD_RATE		9600
 #define TIME_OUT_READ_SERIAL	5000
+
+enum NetworkRegistrationStatus  {
+    notRegistrerAndNotSearching = 0,
+    registrerHomeNetwork = 1,
+    notRegistrerAndSearching = 2,
+    registerDenied = 3,
+    unknown = 4,      
+    registerRoaming = 5, 
+    registerSmsOnlyHomeNetwork = 6, 
+    registerSmsOnlyRoaming = 7,      
+    registeredForEmergencyService = 8,  
+    registeredForCSFBNotPreferedHomeNetwork = 9,        
+    registeredForCSFBNotPreferedRoaming = 10,
+} ;
 
 class Sim800L : public SoftwareSerial
 {
@@ -98,6 +99,8 @@ public:
     uint8_t LED_PIN;
     bool	LED_FLAG;
 
+    void (*onStatusReport)(String);
+    void (*onNewMessage)(String);
     Sim800L(void);
     Sim800L(uint8_t rx, uint8_t tx);
     Sim800L(uint8_t rx, uint8_t tx, uint8_t rst);
@@ -112,11 +115,14 @@ public:
     bool setFunctionalityMode(uint8_t fun);
     uint8_t getFunctionalityMode();
 
+    bool PINIsReady();
     bool setPIN(String pin);
     String getProductInfo();
 
     String getOperatorsList();
     String getOperator();
+    bool registerToNetwork();
+    NetworkRegistrationStatus registrationStatus();
 
     bool calculateLocation();
     String getLocationCode();
@@ -130,7 +136,11 @@ public:
 
 	const uint8_t checkForSMS();
 	bool prepareForSmsReceive();
+	bool setPduMode();
+	bool setTextMode();
+    int sendSms(String pdu);
     bool sendSms(char* number,char* text);
+    void checkForGsmMessage();
     String readSms(uint8_t index);
     String getNumberSms(uint8_t index);
     bool delAllSms();
