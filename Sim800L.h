@@ -93,6 +93,7 @@ private:
 
 public:
 
+    byte isBusy;
     uint8_t	RX_PIN;
     uint8_t TX_PIN;
     uint8_t RESET_PIN;

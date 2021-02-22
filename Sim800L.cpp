@@ -90,6 +90,7 @@ Sim800L::Sim800L(uint8_t rx, uint8_t tx, uint8_t rst, uint8_t led) : SoftwareSer
 void Sim800L::begin()
 {
 
+    isBusy = false;
     pinMode(RESET_PIN, OUTPUT);
 
     _baud = DEFAULT_BAUD_RATE;			// Default baud rate 9600
@@ -256,8 +257,9 @@ String Sim800L::getOperator()
 bool Sim800L::registerToNetwork()
 {
     this->SoftwareSerial::print("AT+CREG=1\r");
-
-    if ( (_readSerial(5000).indexOf("OK")) == -1)
+String status = _readSerial(5000);Serial.println("status");
+Serial.println(status);
+    if ( (status.indexOf("OK")) == -1)
     {
         return true;
     }
@@ -536,12 +538,13 @@ int Sim800L::sendSms(String pdu)
 {
     int pduLength = (pdu.length() / 2)-1;
 
-    if(pduLength < 10)
+    if(pduLength < 10 || isBusy)
     {
         // Bad Pdu
-        return false;
+        return -4;
     }
 
+    isBusy = true;
     this->SoftwareSerial::print (F("AT+CMGS="));  	// command to send sms
     this->SoftwareSerial::print (pduLength);
     this->SoftwareSerial::println();
@@ -552,15 +555,19 @@ int Sim800L::sendSms(String pdu)
     _buffer=_readSerial(60000);
     Serial.println(_buffer);
     //expect CMGS:xxx   , where xxx is a number,for the sending sms.
-    if ((_buffer.indexOf("ER")) != -1) {
+    if ((_buffer.indexOf("ERROR")) != -1) {
+        isBusy = false;
         return -2;
     }
     
     if ((_buffer.indexOf("CMGS")) < 0) {
+        isBusy = false;
         return -3;
   	}
     
     int indexOfTwoDots = _buffer.indexOf(':');
+
+    isBusy = false;
 
     if(indexOfTwoDots == -1)
     {
@@ -937,7 +944,7 @@ String Sim800L::_readSerial()
 
     while (!this->SoftwareSerial::available() && !(millis() > timeOld + TIME_OUT_READ_SERIAL))
     {
-        delay(13);
+       // delay(13);
     }
 
     String str;
@@ -961,7 +968,7 @@ String Sim800L::_readSerial(uint32_t timeout)
 
     while (!this->SoftwareSerial::available() && !(millis() > timeOld + timeout))
     {
-        delay(13);
+        //delay(13);
     }
 
     String str;
