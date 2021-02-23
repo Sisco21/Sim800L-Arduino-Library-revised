@@ -118,6 +118,7 @@ public:
 
     bool PINIsReady();
     bool setPIN(String pin);
+    bool disablePin(String pin);
     String getProductInfo();
 
     String getOperatorsList();

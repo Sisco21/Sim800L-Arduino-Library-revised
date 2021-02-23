@@ -200,11 +200,25 @@ bool Sim800L::setPIN(String pin)
 
     this->SoftwareSerial::print(command);
 
-    if ( (_readSerial(5000).indexOf("ER")) == -1)
+    String pinStatus = "";
+
+    int indexOfAnswer = -1;
+    while (indexOfAnswer == -1)
     {
-        return false;
+        pinStatus = _readSerial(10000);
+        if(pinStatus.indexOf("ERR") != -1)
+        {
+            Serial.println(pinStatus);
+            return false;
+        }
+        if(pinStatus.indexOf("OK") != -1)
+        {
+            Serial.println(pinStatus);
+            return true;
+        }
     }
-    else return true;
+
+
     // Error found, return 1
     // Error NOT found, return 0
 }
@@ -218,13 +232,52 @@ bool Sim800L::PINIsReady()
     // Can take up to 5 seconds
 
     this->SoftwareSerial::print(command);
+    
+    int indexOfAnswer = -1;
+    String pinStatus = ""; 
+    while (indexOfAnswer == -1)
+    {
+        pinStatus = _readSerial(10000);
+        indexOfAnswer = pinStatus.indexOf("ERR");
+        if(indexOfAnswer == -1)
+        {
+            indexOfAnswer = pinStatus.indexOf("OK");
+        }
+    }
+    
+    if ( pinStatus.indexOf("CPIN: READY") != -1)
+    {
+         return true;
+    }
 
-        if ( (_readSerial(5000).indexOf("CPIN:READY")) != -1)
+    return false;
+}
+
+bool Sim800L::disablePin(String pin)
+{
+    
+    if(setPIN(pin))
+    {
+        String command;
+        command  = "AT+CLCK=\"SC\",0,\""+pin+"\"";
+        command += "\r";
+
+        // Can take up to 5 seconds
+
+        this->SoftwareSerial::print(command);
+
+        String pinStatus = _readSerial(10000);
+
+        Serial.println(pinStatus);
+        if(pinStatus.indexOf("OK") != -1)
         {
             return true;
         }
 
-     return false;
+    }
+   
+    return false;
+
 }
 
 String Sim800L::getProductInfo()
@@ -250,6 +303,25 @@ String Sim800L::getOperator()
 
     this->SoftwareSerial::print("AT+COPS ?\r");
 
+    String operatorName = _readSerial(1500);
+
+    if ((operatorName.indexOf("+COPS:")) == -1)
+    {
+        return "Unknown";
+    }
+
+    if ((operatorName.indexOf("\"")) != -1)
+    {
+        int indexOfQuote = operatorName.indexOf("\"");
+        int lastIndexOfQuote = operatorName.lastIndexOf("\"");
+
+        if(lastIndexOfQuote != indexOfQuote && indexOfQuote < lastIndexOfQuote)
+        {
+            return operatorName.substring(indexOfQuote+1, lastIndexOfQuote);
+        }
+
+    }
+
     return _readSerial();
 
 }
@@ -257,9 +329,8 @@ String Sim800L::getOperator()
 bool Sim800L::registerToNetwork()
 {
     this->SoftwareSerial::print("AT+CREG=1\r");
-String status = _readSerial(5000);Serial.println("status");
-Serial.println(status);
-    if ( (status.indexOf("OK")) == -1)
+
+    if ( (_readSerial(5000).indexOf("OK")) == -1)
     {
         return true;
     }
@@ -707,11 +778,11 @@ void Sim800L::checkForGsmMessage()
 
     }
 
-    int indexOfCMT = _buffer.indexOf("+CMT:");
     firstIndexHandle = 0;
     lastIndexHandle = 0;
+    int indexOfCMT = _buffer.indexOf("+CMT:");
 
-    if(indexOfCMT != -1){
+    while(indexOfCMT != -1){
     // Here we receive a new message
     // Response format
     //+CMT: "",135\r\n
@@ -721,12 +792,12 @@ void Sim800L::checkForGsmMessage()
         {
            
             // need to wait for the first CR
-            /*Serial.print(_buffer[i]);
+           /* Serial.print(_buffer[i]);
             Serial.print(" --- ");
-            Serial.println(_buffer[i], HEX);
-            */
+            Serial.println(_buffer[i], HEX);*/
+            
          
-            if(i>0 && _buffer[i-1] == '\r' && _buffer[i] == '\n')
+            if(i>0 && (_buffer[i-1] == '\r' && _buffer[i] == '\n') || (_buffer[i] == '\n'))
             {
                 if(firstIndexHandle == 0)
                 {
@@ -735,20 +806,29 @@ void Sim800L::checkForGsmMessage()
                     //hasMeetFirstCrlf = true;
                 }
                 else{
-                    lastIndexHandle = i-1;
+
+                    if(_buffer[i-1] == '\r')
+                    {lastIndexHandle = i-1;}
+                    else
+                    {lastIndexHandle = i;}
                     // we are at the end of the line. Need to send info
                     if(firstIndexHandle > 0 && lastIndexHandle > firstIndexHandle)
                     {
                         if(onNewMessage != NULL){
                              onNewMessage(_buffer.substring(firstIndexHandle, lastIndexHandle));
                         }
+
+                        // Check all messages in the _buffer. Indeed, we can have more than one message
+                        indexOfCMT = _buffer.indexOf("+CMT:", lastIndexHandle); // add the header '+CMT:' length
+                        firstIndexHandle = 0;
+                        
                     }
                 }
               
             }
         }
     }
-
+    
     //return _buffer;
 	 // +CMTI: "SM",1
 	// if(_buffer.indexOf("+CMTI:") == -1)
