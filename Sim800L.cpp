@@ -624,14 +624,14 @@ int Sim800L::sendSms(String pdu)
     _buffer=_readSerial(100);
     this->SoftwareSerial::write(0x1a); // Ctrl+Z end of the message
     _buffer=_readSerial(60000);
-    Serial.println(_buffer);
+    
     //expect CMGS:xxx   , where xxx is a number,for the sending sms.
-    if ((_buffer.indexOf("ERROR")) != -1) {
+    if ((_buffer.indexOf(F("ERROR"))) != -1) {
         isBusy = false;
         return -2;
     }
     
-    if ((_buffer.indexOf("CMGS")) < 0) {
+    if ((_buffer.indexOf(F("CMGS"))) < 0) {
         isBusy = false;
         return -3;
   	}
@@ -661,15 +661,15 @@ bool Sim800L::sendSms(char* number,char* text)
     this->SoftwareSerial::print(F("\"\r"));
     _buffer=_readSerial();
     this->SoftwareSerial::print (text);
-    this->SoftwareSerial::print ("\r");
+    this->SoftwareSerial::print (F("\r"));
     _buffer=_readSerial();
     this->SoftwareSerial::print((char)26);
     _buffer=_readSerial(60000);
     // Serial.println(_buffer);
     //expect CMGS:xxx   , where xxx is a number,for the sending sms.
-    if ((_buffer.indexOf("ER")) != -1) {
+    if ((_buffer.indexOf(F("ER"))) != -1) {
         return true;
-    } else if ((_buffer.indexOf("CMGS")) != -1) {
+    } else if ((_buffer.indexOf(F("CMGS"))) != -1) {
         return false;
   	} else {
     	return true;
@@ -683,7 +683,7 @@ bool Sim800L::setPduMode()
 	this->SoftwareSerial::print(F("AT+CMGF=0\r"));
     _buffer=_readSerial();
     
-    if((_buffer.indexOf("OK")) == -1)
+    if((_buffer.indexOf(F("OK"))) == -1)
     {
         return false;
     }
@@ -696,7 +696,7 @@ bool Sim800L::setTextMode()
 	this->SoftwareSerial::print(F("AT+CMGF=1\r"));
     _buffer=_readSerial();
     Serial.print(_buffer);
-    if((_buffer.indexOf("OK")) == -1)
+    if((_buffer.indexOf(F("OK"))) == -1)
     {
         return false;
     }
@@ -710,7 +710,7 @@ bool Sim800L::prepareForSmsReceive()
 	this->SoftwareSerial::print(F("AT+CNMI=2,2,0,1,0\r")); // 2,1,0,1,0 Active Ds mode (Data report)
     _buffer=_readSerial();
     //Serial.print(_buffer);
-    if((_buffer.indexOf("OK")) == -1)
+    if((_buffer.indexOf(F("OK"))) == -1)
     {
         return false;
     }
@@ -732,7 +732,7 @@ void Sim800L::checkForGsmMessage()
      
 	 Serial.println("-----------------");*/
 
-    int indexOfCds = _buffer.indexOf("+CDS:");
+    int indexOfCds = _buffer.indexOf(F("+CDS:"));
     int firstIndexHandle = 0;
     int lastIndexHandle = 0;
     //bool hasMeetFirstCrlf = false;
@@ -780,7 +780,7 @@ void Sim800L::checkForGsmMessage()
 
     firstIndexHandle = 0;
     lastIndexHandle = 0;
-    int indexOfCMT = _buffer.indexOf("+CMT:");
+    int indexOfCMT = _buffer.indexOf(F("+CMT:"));
 
     while(indexOfCMT != -1){
     // Here we receive a new message
@@ -819,7 +819,7 @@ void Sim800L::checkForGsmMessage()
                         }
 
                         // Check all messages in the _buffer. Indeed, we can have more than one message
-                        indexOfCMT = _buffer.indexOf("+CMT:", lastIndexHandle); // add the header '+CMT:' length
+                        indexOfCMT = _buffer.indexOf(F("+CMT:"), lastIndexHandle); // add the header '+CMT:' length
                         firstIndexHandle = 0;
                         
                     }
@@ -846,12 +846,9 @@ const uint8_t Sim800L::checkForSMS()
 	 	return 0;
 	 }
      _buffer += _readSerial(1000);
-	 Serial.println("checkForSMS");
-	 Serial.println(_buffer);
      
-	 Serial.println("-----------------");
 	 // +CMTI: "SM",1
-	 if(_buffer.indexOf("+CMTI:") == -1)
+	 if(_buffer.indexOf(F("+CMTI:")) == -1)
 	 {
 	 	return 0;
 	 }
@@ -865,7 +862,7 @@ String Sim800L::getNumberSms(uint8_t index)
     //Serial.println(_buffer.length());
     if (_buffer.length() > 10) //avoid empty sms
     {
-        uint8_t _idx1=_buffer.indexOf("+CMGR:");
+        uint8_t _idx1=_buffer.indexOf(F("+CMGR:"));
         _idx1=_buffer.indexOf("\",\"",_idx1+1);
         return _buffer.substring(_idx1+3,_buffer.indexOf("\",\"",_idx1+4));
     }
@@ -890,7 +887,7 @@ String Sim800L::readSms(uint8_t index)
     _buffer=_readSerial();
    //Serial.println("Received !!");
    //Serial.println(_buffer);
-    if (_buffer.indexOf("CMGR=") == -1)
+    if (_buffer.indexOf(F("CMGR=")) == -1)
     {
     	return "";
     }
@@ -909,9 +906,8 @@ bool Sim800L::delAllSms()
 
     this->SoftwareSerial::print(F("AT+CMGD=4\r"));
     _buffer=_readSerial(25000);
-    Serial.print("Delete : ");
-    Serial.println(_buffer);
-    if ( (_buffer.indexOf("ER")) == -1)
+    
+    if ( (_buffer.indexOf(F("ER"))) == -1)
     {
         return false;
     }
@@ -926,12 +922,12 @@ void Sim800L::RTCtime(int *day,int *month, int *year,int *hour,int *minute, int 
     this->SoftwareSerial::print(F("at+cclk?\r\n"));
     // if respond with ERROR try one more time.
     _buffer=_readSerial();
-    if ((_buffer.indexOf("ERR"))!=-1)
+    if ((_buffer.indexOf(F("ERR")))!=-1)
     {
         delay(50);
         this->SoftwareSerial::print(F("at+cclk?\r\n"));
     }
-    if ((_buffer.indexOf("ERR"))==-1)
+    if ((_buffer.indexOf(F("ERR")))==-1)
     {
         _buffer=_buffer.substring(_buffer.indexOf("\"")+1,_buffer.lastIndexOf("\"")-1);
         *year=_buffer.substring(0,2).toInt();
